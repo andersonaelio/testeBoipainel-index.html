@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boi na Brasa — Painel da Cozinha</title>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --char:#0A0506; --soot:#110906; --panel:#1A0F09; --panel2:#20140C;
+  --line:rgba(176,122,74,.18); --ember:#A93B22; --ember-hi:#C24A2B;
+  --copper:#B07A4A; --amber:#D9A05B; --cream:#EDE2D2; --ash:#9C8771; --ok:#6FBF73;
+  --display:'Big Shoulders Display','Arial Narrow',Impact,sans-serif;
+  --body:'Archivo',-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--char);color:var(--cream);font-family:var(--body);font-size:15px;line-height:1.5}
+h1,h2,h3{font-family:var(--display);font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+button{font-family:var(--body);cursor:pointer}
+::selection{background:var(--ember);color:var(--cream)}
+
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;padding:1rem 1.6rem;
+  border-bottom:1px solid var(--line);background:var(--soot);position:sticky;top:0;z-index:20;
+}
+.brand-mark{display:flex;align-items:center;gap:.7rem}
+.brand-mark .flame{width:34px;height:34px;border-radius:8px;background:var(--ember);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:1.1rem}
+.brand-name{font-family:var(--display);font-weight:800;font-size:1.1rem;letter-spacing:.06em;text-transform:uppercase}
+.brand-name em{font-style:normal;color:var(--amber)}
+.brand-sub{font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ash)}
+.conn-status{display:flex;align-items:center;gap:.5rem;font-size:.72rem;color:var(--ash);text-transform:uppercase;letter-spacing:.08em}
+.conn-dot{width:8px;height:8px;border-radius:50%;background:#564a40}
+.conn-status.live .conn-dot{background:var(--ok);box-shadow:0 0 8px rgba(111,191,115,.7)}
+.conn-status.off .conn-dot{background:var(--ember)}
+.sound-toggle{
+  display:flex;align-items:center;gap:.4rem;
+  background:var(--panel);border:1px solid var(--line);color:var(--ash);
+  padding:.5rem .9rem;border-radius:6px;font-size:.72rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin-left:1rem;
+}
+.sound-toggle.active{border-color:var(--ok);color:var(--ok)}
+
+main{padding:1.6rem;max-width:1400px;margin:0 auto}
+.config-warning{
+  background:var(--panel);border:1px solid var(--ember);border-radius:8px;padding:1rem 1.2rem;
+  margin-bottom:1.4rem;font-size:.85rem;color:var(--cream)
+}
+.config-warning code{background:var(--char);padding:.1rem .4rem;border-radius:4px;color:var(--amber)}
+
+.stats-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.9rem;margin-bottom:1.6rem}
+.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.9rem 1rem}
+.stat-label{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ash);margin-bottom:.35rem}
+.stat-value{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1}
+.stat-value.small{font-size:1.1rem}
+
+.payment-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem;margin-bottom:1.6rem}
+.pay-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:.9rem 1.1rem;display:flex;align-items:center;justify-content:space-between;
+}
+.pay-card-label{font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:.25rem .65rem;border-radius:5px}
+.pay-card-value{font-family:var(--display);font-weight:800;font-size:1.35rem}
+
+.end-shift-btn{
+  display:flex;align-items:center;gap:.4rem;
+  background:var(--panel);border:1px solid var(--line);color:var(--ash);
+  padding:.5rem .9rem;border-radius:6px;font-size:.72rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin-left:.6rem;
+}
+.end-shift-btn:hover{border-color:var(--ember);color:var(--ember-hi)}
+
+.panel-tabs{display:flex;gap:.6rem;margin-bottom:1.2rem}
+.panel-tabs button{
+  border:1px solid var(--line);background:var(--panel);color:var(--ash);
+  padding:.5rem 1rem;border-radius:6px;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+}
+.panel-tabs button.active{color:var(--cream);border-color:var(--amber)}
+
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.col{background:var(--panel2);border:1px solid var(--line);border-radius:10px;min-height:200px;display:flex;flex-direction:column}
+.col-head{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1rem;border-bottom:1px solid var(--line)}
+.col-title{display:flex;align-items:center;gap:.5rem;font-family:var(--display);font-weight:800;font-size:1rem;text-transform:uppercase;letter-spacing:.04em}
+.col-dot{width:9px;height:9px;border-radius:50%}
+.col-count{background:rgba(176,122,74,.15);color:var(--ash);font-size:.72rem;font-weight:700;padding:.15rem .55rem;border-radius:999px}
+.col-body{flex:1;padding:.7rem;display:flex;flex-direction:column;gap:.7rem;min-height:120px}
+.col-body.drag-over{background:rgba(217,160,91,.06)}
+.col-empty{color:var(--ash);font-size:.78rem;text-align:center;padding:1.4rem 0}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.8rem .9rem;cursor:grab}
+.card:active{cursor:grabbing}
+.card.dragging{opacity:.4}
+.card-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem}
+.card-num{font-family:var(--display);font-weight:800;font-size:1rem}
+.card-time{font-size:.72rem;color:var(--ash)}
+.card-name{font-size:.85rem;font-weight:600;margin-bottom:.15rem}
+.card-addr{font-size:.74rem;color:var(--ash);margin-bottom:.4rem}
+.card-items{font-size:.78rem;color:var(--ash);margin-bottom:.5rem;line-height:1.45}
+.card-bottom{display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem}
+.card-total{font-weight:700;color:var(--amber);font-size:.92rem}
+.pay-badge{font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.2rem .5rem;border-radius:5px}
+.pay-pix{background:rgba(217,160,91,.15);color:var(--amber)}
+.pay-dinheiro{background:rgba(111,191,115,.15);color:var(--ok)}
+.pay-cartao{background:rgba(176,122,74,.18);color:var(--copper)}
+.card-action{width:100%;border:none;padding:.5rem;border-radius:6px;font-size:.75rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--cream)}
+.act-pagos{background:var(--amber);color:#3A2405}
+.act-preparando{background:var(--ember)}
+.act-prontos{background:var(--ok);color:#0A2A0C}
+.act-arquivar{background:none;border:1px solid var(--line);color:var(--ash)}
+
+.new-order-banner{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:var(--amber);color:#3A2405;
+  display:flex;align-items:center;justify-content:center;gap:1rem;
+  padding:.85rem 1.2rem;font-weight:700;font-size:.9rem;
+  transform:translateY(-100%);transition:transform .3s ease;
+}
+.new-order-banner.show{transform:translateY(0)}
+.new-order-banner button{
+  background:#3A2405;color:var(--amber);border:none;padding:.4rem .9rem;
+  border-radius:6px;font-weight:700;font-size:.78rem;letter-spacing:.03em;text-transform:uppercase;
+}
+@keyframes flashNew{
+  0%,100%{box-shadow:0 0 0 0 rgba(217,160,91,0)}
+  50%{box-shadow:0 0 0 5px rgba(217,160,91,.7)}
+}
+.card.new-order{animation:flashNew 1s ease-in-out 4}
+
+.history-list{display:flex;flex-direction:column;gap:.6rem;max-width:640px}
+.hist-row{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.9rem 1.1rem}
+.hist-date{font-weight:700;font-size:.9rem}
+.hist-meta{font-size:.78rem;color:var(--ash)}
+.hist-total{font-family:var(--display);font-weight:800;font-size:1.15rem;color:var(--amber)}
+
+@media(max-width:980px){
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+  .board{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="new-order-banner" id="newOrderBanner">
+  <span id="newOrderBannerText"></span>
+  <button onclick="dismissBanner()">Ok, vi</button>
+</div>
+<div class="topbar">
+  <div class="brand-mark">
+    <div class="flame">B</div>
+    <div>
+      <div class="brand-name">Boi na <em>Brasa</em></div>
+      <div class="brand-sub">Painel interno · não é a página do cliente</div>
+    </div>
+  </div>
+  <div class="conn-status off" id="connStatus"><span class="conn-dot"></span><span id="connText">Conectando...</span></div>
+  <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔈 Ativar som</button>
+  <button class="end-shift-btn" id="endShiftBtn" onclick="encerrarExpediente()">🌙 Encerrar expediente</button>
+</div>
+
+<main>
+  <div class="config-warning" id="configWarning" style="display:none">
+    Faltam as credenciais do Supabase. Abra este arquivo, procure por <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> no topo do script e cole os valores do seu projeto (mesmos usados no site).
+  </div>
+
+  <div class="stats-row" id="statsRow"></div>
+  <div class="payment-row" id="paymentRow"></div>
+
+  <div class="panel-tabs">
+    <button id="subKanban" class="active" onclick="switchSub('kanban')">Quadro</button>
+    <button id="subHist" onclick="switchSub('historico')">Histórico</button>
+  </div>
+
+  <div id="subViewKanban"><div class="board" id="board"></div></div>
+  <div id="subViewHist" style="display:none"><div class="history-list" id="historyList"></div></div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://stkkruiowpgzknaihdgt.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8MWj31AR68Pb1tn4fRZ2rw_NXj7Q3QT';
+
+const STATUS_ORDER = ['novos','pagos','preparando','prontos'];
+const STATUS_LABEL = {novos:'Novos', pagos:'Pagos', preparando:'Preparando', prontos:'Prontos'};
+const STATUS_COLOR = {novos:'var(--ash)', pagos:'var(--amber)', preparando:'var(--ember)', prontos:'var(--ok)'};
+const NEXT_STATUS = {novos:'pagos', pagos:'preparando', preparando:'prontos'};
+const NEXT_LABEL = {novos:'Confirmar pagamento', pagos:'Enviar para preparo', preparando:'Pedido pronto'};
+const PAY_LABEL = {pix:'Pix', dinheiro:'Dinheiro', cartao:'Cartão'};
+
+let supabaseClient = null;
+let ordersCache = [];
+let newOrderIds = new Set();
+let refreshTimer = null;
+let titleFlashTimer = null;
+const ORIGINAL_TITLE = document.title;
+
+function scheduleRefresh(){
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refreshPainel, 250);
+}
+
+let audioCtx = null;
+let soundEnabled = false;
+
+function toggleSound(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ console.warn('Áudio não suportado neste navegador:', e); return; }
+  }
+  audioCtx.resume().then(function(){
+    soundEnabled = true;
+    const btn = document.getElementById('soundToggle');
+    btn.textContent = '🔊 Som ativado';
+    btn.classList.add('active');
+    playChime();
+  });
+}
+
+function playChime(){
+  if(!audioCtx || audioCtx.state !== 'running') return;
+  const now = audioCtx.currentTime;
+  [880, 1174.66].forEach(function(freq, i){
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, now + i*0.15);
+    gain.gain.linearRampToValueAtTime(0.3, now + i*0.15 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.32);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + i*0.15);
+    osc.stop(now + i*0.15 + 0.34);
+  });
+}
+
+function flashTitle(){
+  if(titleFlashTimer) return;
+  let on = false;
+  titleFlashTimer = setInterval(function(){
+    document.title = on ? ORIGINAL_TITLE : '🔔 Novo pedido!';
+    on = !on;
+  }, 900);
+}
+function stopFlashTitle(){
+  if(titleFlashTimer){ clearInterval(titleFlashTimer); titleFlashTimer = null; document.title = ORIGINAL_TITLE; }
+}
+document.addEventListener('click', stopFlashTitle);
+
+function dismissBanner(){
+  document.getElementById('newOrderBanner').classList.remove('show');
+  stopFlashTitle();
+}
+
+function showNewOrderBanner(order){
+  const banner = document.getElementById('newOrderBanner');
+  document.getElementById('newOrderBannerText').textContent =
+    '🔔 Pedido #' + order.numero + ' chegou' + (order.nome ? ' — ' + order.nome : '');
+  banner.classList.add('show');
+  clearTimeout(banner._hideTimer);
+  banner._hideTimer = setTimeout(function(){ banner.classList.remove('show'); }, 9000);
+}
+
+function handleNewOrder(order){
+  playChime();
+  flashTitle();
+  showNewOrderBanner(order);
+  newOrderIds.add(order.id);
+  setTimeout(function(){ newOrderIds.delete(order.id); }, 4200);
+  scheduleRefresh();
+}
+
+function fmtBR(v){ return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
+function pad(n){ return n < 10 ? '0'+n : ''+n; }
+function dateKey(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+function timeLabel(d){ return pad(d.getHours())+':'+pad(d.getMinutes()); }
+function todayKey(){ return dateKey(new Date()); }
+
+function initSupabase(){
+  if(SUPABASE_URL.indexOf('COLOQUE_AQUI')>-1 || !window.supabase){
+    document.getElementById('configWarning').style.display = 'block';
+    return false;
+  }
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return true;
+}
+
+function setConn(live){
+  const el = document.getElementById('connStatus');
+  el.className = 'conn-status ' + (live ? 'live' : 'off');
+  document.getElementById('connText').textContent = live ? 'Ao vivo' : 'Sem conexão';
+}
+
+async function loadOrders(){
+  if(!supabaseClient) return [];
+  const { data, error } = await supabaseClient.from('pedidos').select('*').order('numero', {ascending:true});
+  if(error){ console.error(error); setConn(false); return []; }
+  setConn(true);
+  return data || [];
+}
+
+function itemsSummary(itens){
+  const groups = {};
+  (itens||[]).forEach(function(i){
+    const key = i.nome + '|' + (i.removidos||[]).join(',');
+    if(!groups[key]) groups[key] = {nome:i.nome, removidos:i.removidos||[], qtd:0};
+    groups[key].qtd += 1;
+  });
+  return Object.values(groups).map(function(g){
+    let s = g.qtd+'x '+g.nome;
+    if(g.removidos.length) s += ' (sem '+g.removidos.join(', ').toLowerCase()+')';
+    return s;
+  }).join('; ');
+}
+
+function renderStats(orders){
+  const today = todayKey();
+  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today; });
+  const novos = orders.filter(function(o){ return o.status==='novos' && !o.arquivado; }).length;
+  const preparando = orders.filter(function(o){ return o.status==='preparando' && !o.arquivado; }).length;
+  const prontos = orders.filter(function(o){ return o.status==='prontos' && !o.arquivado; }).length;
+  const faturamento = todays.reduce(function(s,o){ return s+Number(o.total); }, 0);
+
+  const cards = [
+    {label:'Novos aguardando', value:novos},
+    {label:'Em preparo', value:preparando},
+    {label:'Prontos', value:prontos},
+    {label:'Pedidos hoje', value:todays.length},
+    {label:'Faturamento hoje', value:fmtBR(faturamento)}
+  ];
+  const row = document.getElementById('statsRow');
+  row.innerHTML = '';
+  cards.forEach(function(c){
+    const el = document.createElement('div');
+    el.className = 'stat-card';
+    el.innerHTML = '<div class="stat-label">'+c.label+'</div><div class="stat-value">'+c.value+'</div>';
+    row.appendChild(el);
+  });
+}
+
+function renderPaymentBreakdown(orders){
+  const today = todayKey();
+  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today; });
+  const porPag = {pix:0, dinheiro:0, cartao:0};
+  todays.forEach(function(o){ porPag[o.forma_pagamento] = (porPag[o.forma_pagamento]||0) + Number(o.total); });
+
+  const items = [
+    {key:'pix', label:'Pix'},
+    {key:'dinheiro', label:'Dinheiro'},
+    {key:'cartao', label:'Cartão'}
+  ];
+  const row = document.getElementById('paymentRow');
+  row.innerHTML = '';
+  items.forEach(function(it){
+    const el = document.createElement('div');
+    el.className = 'pay-card';
+    el.innerHTML =
+      '<span class="pay-card-label pay-'+it.key+'">'+it.label+'</span>' +
+      '<span class="pay-card-value">'+fmtBR(porPag[it.key])+'</span>';
+    row.appendChild(el);
+  });
+}
+
+function renderBoard(orders){
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  STATUS_ORDER.forEach(function(status){
+    const colOrders = orders.filter(function(o){ return o.status===status && !o.arquivado; })
+      .sort(function(a,b){ return new Date(a.criado_em) - new Date(b.criado_em); });
+
+    const col = document.createElement('div');
+    col.className = 'col';
+    col.innerHTML =
+      '<div class="col-head"><div class="col-title"><span class="col-dot" style="background:'+STATUS_COLOR[status]+'"></span>'+STATUS_LABEL[status]+'</div>' +
+      '<span class="col-count">'+colOrders.length+'</span></div>' +
+      '<div class="col-body" id="colbody-'+status+'"></div>';
+    board.appendChild(col);
+
+    const body = col.querySelector('.col-body');
+    body.addEventListener('dragover', function(e){ e.preventDefault(); body.classList.add('drag-over'); });
+    body.addEventListener('dragleave', function(){ body.classList.remove('drag-over'); });
+    body.addEventListener('drop', function(e){
+      e.preventDefault();
+      body.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      moveOrder(id, status);
+    });
+
+    if(colOrders.length===0){
+      body.innerHTML = '<div class="col-empty">Sem pedidos</div>';
+      return;
+    }
+    colOrders.forEach(function(o){
+      const card = document.createElement('div');
+      card.className = 'card' + (newOrderIds.has(o.id) ? ' new-order' : '');
+      card.draggable = true;
+      card.addEventListener('dragstart', function(e){
+        e.dataTransfer.setData('text/plain', o.id);
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', function(){ card.classList.remove('dragging'); });
+
+      let actionHtml = '';
+      if(status==='prontos'){
+        actionHtml = '<button class="card-action act-arquivar" onclick="archiveOrder(\''+o.id+'\')">Arquivar</button>';
+      } else {
+        const next = NEXT_STATUS[status];
+        actionHtml = '<button class="card-action act-'+next+'" onclick="moveOrder(\''+o.id+'\',\''+next+'\')">'+NEXT_LABEL[status]+'</button>';
+      }
+
+      card.innerHTML =
+        '<div class="card-top"><span class="card-num">#'+o.numero+'</span><span class="card-time">'+timeLabel(new Date(o.criado_em))+'</span></div>' +
+        (o.nome ? '<div class="card-name">'+o.nome+'</div>' : '') +
+        (o.endereco ? '<div class="card-addr">'+o.endereco+(o.referencia ? ' · '+o.referencia : '')+'</div>' : '') +
+        '<div class="card-items">'+itemsSummary(o.itens)+'</div>' +
+        '<div class="card-bottom"><span class="card-total">'+fmtBR(o.total)+'</span><span class="pay-badge pay-'+o.forma_pagamento+'">'+PAY_LABEL[o.forma_pagamento]+'</span></div>' +
+        actionHtml;
+      body.appendChild(card);
+    });
+  });
+}
+
+function renderHistory(orders){
+  const byDate = {};
+  orders.forEach(function(o){
+    const k = dateKey(new Date(o.criado_em));
+    if(!byDate[k]) byDate[k] = {count:0, total:0};
+    byDate[k].count += 1;
+    byDate[k].total += Number(o.total);
+  });
+  const keys = Object.keys(byDate).sort().reverse();
+  const today = todayKey();
+  const yestKey = dateKey(new Date(Date.now()-86400000));
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+  if(keys.length===0){
+    list.innerHTML = '<div class="col-empty">Sem histórico ainda</div>';
+    return;
+  }
+  keys.forEach(function(k){
+    const d = byDate[k];
+    let label = k;
+    if(k===today) label = 'Hoje';
+    else if(k===yestKey) label = 'Ontem';
+    else { const p = k.split('-'); label = p[2]+'/'+p[1]; }
+    const row = document.createElement('div');
+    row.className = 'hist-row';
+    row.innerHTML =
+      '<div><div class="hist-date">'+label+'</div><div class="hist-meta">'+d.count+' pedidos</div></div>' +
+      '<div class="hist-total">'+fmtBR(d.total)+'</div>';
+    list.appendChild(row);
+  });
+}
+
+async function moveOrder(id, newStatus){
+  if(!supabaseClient) return;
+  await supabaseClient.from('pedidos').update({status:newStatus}).eq('id', id);
+  refreshPainel();
+}
+async function archiveOrder(id){
+  if(!supabaseClient) return;
+  if(!confirm('Arquivar esse pedido? Ele sai do quadro (mas continua contando no faturamento e histórico).')) return;
+  await supabaseClient.from('pedidos').update({arquivado:true}).eq('id', id);
+  refreshPainel();
+}
+
+async function refreshPainel(){
+  const orders = await loadOrders();
+  ordersCache = orders;
+  renderStats(orders);
+  renderPaymentBreakdown(orders);
+  renderBoard(orders);
+  renderHistory(orders);
+}
+
+async function encerrarExpediente(){
+  if(!supabaseClient) return;
+  const ativos = ordersCache.filter(function(o){ return !o.arquivado; });
+  if(ativos.length===0){
+    alert('Não tem pedido ativo no quadro agora — nada pra encerrar.');
+    return;
+  }
+  const ok = confirm(
+    'Encerrar o expediente vai arquivar os ' + ativos.length + ' pedidos ativos do quadro ' +
+    '(Novos, Pagos, Preparando e Prontos), deixando tudo limpo pro próximo dia.\n\n' +
+    'O faturamento e o histórico de hoje continuam intactos — nada é apagado.\n\nConfirma?'
+  );
+  if(!ok) return;
+  await supabaseClient.from('pedidos').update({arquivado:true}).eq('arquivado', false);
+  refreshPainel();
+}
+
+function switchSub(name){
+  document.getElementById('subKanban').classList.toggle('active', name==='kanban');
+  document.getElementById('subHist').classList.toggle('active', name==='historico');
+  document.getElementById('subViewKanban').style.display = name==='kanban' ? 'block' : 'none';
+  document.getElementById('subViewHist').style.display = name==='historico' ? 'block' : 'none';
+}
+
+(function init(){
+  const ok = initSupabase();
+  if(!ok){ renderStats([]); renderPaymentBreakdown([]); renderBoard([]); renderHistory([]); return; }
+  refreshPainel();
+  supabaseClient
+    .channel('pedidos-realtime')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'pedidos'}, function(payload){ handleNewOrder(payload.new); })
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'pedidos'}, scheduleRefresh)
+    .on('postgres_changes', {event:'DELETE', schema:'public', table:'pedidos'}, scheduleRefresh)
+    .subscribe();
+})();
+</script>
+</body>
+</html>
