@@ -33,6 +33,13 @@ button{font-family:var(--body);cursor:pointer}
 .conn-dot{width:8px;height:8px;border-radius:50%;background:#564a40}
 .conn-status.live .conn-dot{background:var(--ok);box-shadow:0 0 8px rgba(111,191,115,.7)}
 .conn-status.off .conn-dot{background:var(--ember)}
+.sound-toggle{
+  display:flex;align-items:center;gap:.4rem;
+  background:var(--panel);border:1px solid var(--line);color:var(--ash);
+  padding:.5rem .9rem;border-radius:6px;font-size:.72rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin-left:1rem;
+}
+.sound-toggle.active{border-color:var(--ok);color:var(--ok)}
 
 main{padding:1.6rem;max-width:1400px;margin:0 auto}
 .config-warning{
@@ -130,6 +137,7 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
     </div>
   </div>
   <div class="conn-status off" id="connStatus"><span class="conn-dot"></span><span id="connText">Conectando...</span></div>
+  <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔈 Ativar som</button>
 </div>
 
 <main>
@@ -171,23 +179,38 @@ function scheduleRefresh(){
   refreshTimer = setTimeout(refreshPainel, 250);
 }
 
+let audioCtx = null;
+let soundEnabled = false;
+
+function toggleSound(){
+  if(!audioCtx){
+    try{ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch(e){ console.warn('Áudio não suportado neste navegador:', e); return; }
+  }
+  audioCtx.resume().then(function(){
+    soundEnabled = true;
+    const btn = document.getElementById('soundToggle');
+    btn.textContent = '🔊 Som ativado';
+    btn.classList.add('active');
+    playChime();
+  });
+}
+
 function playChime(){
-  try{
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-    [880, 1174.66].forEach(function(freq, i){
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, now + i*0.15);
-      gain.gain.linearRampToValueAtTime(0.3, now + i*0.15 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.32);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + i*0.15);
-      osc.stop(now + i*0.15 + 0.34);
-    });
-  }catch(e){ console.warn('Som indisponível neste navegador:', e); }
+  if(!audioCtx || audioCtx.state !== 'running') return;
+  const now = audioCtx.currentTime;
+  [880, 1174.66].forEach(function(freq, i){
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, now + i*0.15);
+    gain.gain.linearRampToValueAtTime(0.3, now + i*0.15 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.32);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(now + i*0.15);
+    osc.stop(now + i*0.15 + 0.34);
+  });
 }
 
 function flashTitle(){
