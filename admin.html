@@ -85,6 +85,24 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
 .act-prontos{background:var(--ok);color:#0A2A0C}
 .act-arquivar{background:none;border:1px solid var(--line);color:var(--ash)}
 
+.new-order-banner{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  background:var(--amber);color:#3A2405;
+  display:flex;align-items:center;justify-content:center;gap:1rem;
+  padding:.85rem 1.2rem;font-weight:700;font-size:.9rem;
+  transform:translateY(-100%);transition:transform .3s ease;
+}
+.new-order-banner.show{transform:translateY(0)}
+.new-order-banner button{
+  background:#3A2405;color:var(--amber);border:none;padding:.4rem .9rem;
+  border-radius:6px;font-weight:700;font-size:.78rem;letter-spacing:.03em;text-transform:uppercase;
+}
+@keyframes flashNew{
+  0%,100%{box-shadow:0 0 0 0 rgba(217,160,91,0)}
+  50%{box-shadow:0 0 0 5px rgba(217,160,91,.7)}
+}
+.card.new-order{animation:flashNew 1s ease-in-out 4}
+
 .history-list{display:flex;flex-direction:column;gap:.6rem;max-width:640px}
 .hist-row{display:flex;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.9rem 1.1rem}
 .hist-date{font-weight:700;font-size:.9rem}
@@ -99,6 +117,10 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
 </head>
 <body>
 
+<div class="new-order-banner" id="newOrderBanner">
+  <span id="newOrderBannerText"></span>
+  <button onclick="dismissBanner()">Ok, vi</button>
+</div>
 <div class="topbar">
   <div class="brand-mark">
     <div class="flame">B</div>
@@ -139,6 +161,70 @@ const PAY_LABEL = {pix:'Pix', dinheiro:'Dinheiro', cartao:'Cartão'};
 
 let supabaseClient = null;
 let ordersCache = [];
+let newOrderIds = new Set();
+let refreshTimer = null;
+let titleFlashTimer = null;
+const ORIGINAL_TITLE = document.title;
+
+function scheduleRefresh(){
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refreshPainel, 250);
+}
+
+function playChime(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    [880, 1174.66].forEach(function(freq, i){
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + i*0.15);
+      gain.gain.linearRampToValueAtTime(0.3, now + i*0.15 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.32);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i*0.15);
+      osc.stop(now + i*0.15 + 0.34);
+    });
+  }catch(e){ console.warn('Som indisponível neste navegador:', e); }
+}
+
+function flashTitle(){
+  if(titleFlashTimer) return;
+  let on = false;
+  titleFlashTimer = setInterval(function(){
+    document.title = on ? ORIGINAL_TITLE : '🔔 Novo pedido!';
+    on = !on;
+  }, 900);
+}
+function stopFlashTitle(){
+  if(titleFlashTimer){ clearInterval(titleFlashTimer); titleFlashTimer = null; document.title = ORIGINAL_TITLE; }
+}
+document.addEventListener('click', stopFlashTitle);
+
+function dismissBanner(){
+  document.getElementById('newOrderBanner').classList.remove('show');
+  stopFlashTitle();
+}
+
+function showNewOrderBanner(order){
+  const banner = document.getElementById('newOrderBanner');
+  document.getElementById('newOrderBannerText').textContent =
+    '🔔 Pedido #' + order.numero + ' chegou' + (order.nome ? ' — ' + order.nome : '');
+  banner.classList.add('show');
+  clearTimeout(banner._hideTimer);
+  banner._hideTimer = setTimeout(function(){ banner.classList.remove('show'); }, 9000);
+}
+
+function handleNewOrder(order){
+  playChime();
+  flashTitle();
+  showNewOrderBanner(order);
+  newOrderIds.add(order.id);
+  setTimeout(function(){ newOrderIds.delete(order.id); }, 4200);
+  scheduleRefresh();
+}
 
 function fmtBR(v){ return 'R$ ' + Number(v).toFixed(2).replace('.', ','); }
 function pad(n){ return n < 10 ? '0'+n : ''+n; }
@@ -242,7 +328,7 @@ function renderBoard(orders){
     }
     colOrders.forEach(function(o){
       const card = document.createElement('div');
-      card.className = 'card';
+      card.className = 'card' + (newOrderIds.has(o.id) ? ' new-order' : '');
       card.draggable = true;
       card.addEventListener('dragstart', function(e){
         e.dataTransfer.setData('text/plain', o.id);
@@ -309,6 +395,7 @@ async function moveOrder(id, newStatus){
 }
 async function archiveOrder(id){
   if(!supabaseClient) return;
+  if(!confirm('Arquivar esse pedido? Ele sai do quadro (mas continua contando no faturamento e histórico).')) return;
   await supabaseClient.from('pedidos').update({arquivado:true}).eq('id', id);
   refreshPainel();
 }
@@ -334,7 +421,9 @@ function switchSub(name){
   refreshPainel();
   supabaseClient
     .channel('pedidos-realtime')
-    .on('postgres_changes', {event:'*', schema:'public', table:'pedidos'}, function(){ refreshPainel(); })
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'pedidos'}, function(payload){ handleNewOrder(payload.new); })
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'pedidos'}, scheduleRefresh)
+    .on('postgres_changes', {event:'DELETE', schema:'public', table:'pedidos'}, scheduleRefresh)
     .subscribe();
 })();
 </script>
