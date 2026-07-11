@@ -107,6 +107,38 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
 .act-preparando{background:var(--ember)}
 .act-prontos{background:var(--ok);color:#0A2A0C}
 .act-arquivar{background:none;border:1px solid var(--line);color:var(--ash)}
+.card-action-row{display:flex;gap:.5rem}
+.card-action-row .card-action{flex:1}
+.act-cancelar{background:none;border:1px solid rgba(169,59,34,.4);color:var(--ember-hi);flex:0 0 auto;padding-left:.8rem;padding-right:.8rem}
+
+.card-time{font-size:.72rem;font-weight:700;padding:.15rem .5rem;border-radius:5px;color:var(--ash);background:rgba(176,122,74,.1)}
+.card-time.warn{color:#3A2405;background:var(--amber)}
+.card-time.late{color:var(--cream);background:var(--ember)}
+
+.board-toolbar{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem}
+.search-input{
+  flex:1;max-width:340px;background:var(--panel);border:1px solid var(--line);color:var(--cream);
+  padding:.6rem .9rem;border-radius:6px;font-size:.85rem;
+}
+.search-input::placeholder{color:var(--ash)}
+.col-body{flex:1;padding:.7rem;display:flex;flex-direction:column;gap:.7rem;min-height:120px;max-height:calc(100vh - 420px);overflow-y:auto}
+
+.customer-list{display:flex;flex-direction:column;gap:.6rem;max-width:760px}
+.customer-row{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.9rem 1.1rem;
+}
+.customer-info{flex:1;min-width:0}
+.customer-name{font-weight:700;font-size:.92rem}
+.customer-addr{font-size:.76rem;color:var(--ash);margin-top:.1rem}
+.customer-stats{display:flex;gap:1.6rem;align-items:center;flex-shrink:0}
+.customer-stat{text-align:right}
+.customer-stat-label{font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ash)}
+.customer-stat-value{font-family:var(--display);font-weight:800;font-size:1.1rem}
+.customer-badge{
+  font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  padding:.2rem .55rem;border-radius:999px;background:rgba(111,191,115,.15);color:var(--ok);flex-shrink:0;
+}
 
 .new-order-banner{
   position:fixed;top:0;left:0;right:0;z-index:100;
@@ -168,10 +200,17 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
   <div class="panel-tabs">
     <button id="subKanban" class="active" onclick="switchSub('kanban')">Quadro</button>
     <button id="subHist" onclick="switchSub('historico')">Histórico</button>
+    <button id="subClientes" onclick="switchSub('clientes')">Clientes</button>
   </div>
 
-  <div id="subViewKanban"><div class="board" id="board"></div></div>
+  <div id="subViewKanban">
+    <div class="board-toolbar">
+      <input class="search-input" id="searchInput" type="text" placeholder="Buscar por nome ou número do pedido..." oninput="renderBoard(ordersCache)">
+    </div>
+    <div class="board" id="board"></div>
+  </div>
   <div id="subViewHist" style="display:none"><div class="history-list" id="historyList"></div></div>
+  <div id="subViewClientes" style="display:none"><div class="customer-list" id="customerList"></div></div>
 </main>
 
 <script>
@@ -252,7 +291,7 @@ function dismissBanner(){
 function showNewOrderBanner(order){
   const banner = document.getElementById('newOrderBanner');
   document.getElementById('newOrderBannerText').textContent =
-    '🔔 Pedido #' + order.numero + ' chegou' + (order.nome ? ' — ' + order.nome : '');
+    '🔔 Novo pedido chegou' + (order.nome ? ' — ' + order.nome : '');
   banner.classList.add('show');
   clearTimeout(banner._hideTimer);
   banner._hideTimer = setTimeout(function(){ banner.classList.remove('show'); }, 9000);
@@ -296,6 +335,27 @@ async function loadOrders(){
   return data || [];
 }
 
+function elapsedInfo(d){
+  const mins = Math.max(0, Math.round((Date.now() - d.getTime())/60000));
+  let cls = '';
+  if(mins >= 20) cls = 'late';
+  else if(mins >= 10) cls = 'warn';
+  const label = mins < 1 ? 'agora' : (mins+' min');
+  return {mins:mins, cls:cls, label:label};
+}
+
+function computeDailyNumbers(orders){
+  const byDay = {};
+  orders.slice().sort(function(a,b){ return new Date(a.criado_em) - new Date(b.criado_em); })
+    .forEach(function(o){
+      const k = dateKey(new Date(o.criado_em));
+      if(!byDay[k]) byDay[k] = 0;
+      byDay[k] += 1;
+      o._dailyNum = byDay[k];
+    });
+  return orders;
+}
+
 function itemsSummary(itens){
   const groups = {};
   (itens||[]).forEach(function(i){
@@ -312,7 +372,7 @@ function itemsSummary(itens){
 
 function renderStats(orders){
   const today = todayKey();
-  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today; });
+  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today && o.status!=='cancelado'; });
   const novos = orders.filter(function(o){ return o.status==='novos' && !o.arquivado; }).length;
   const preparando = orders.filter(function(o){ return o.status==='preparando' && !o.arquivado; }).length;
   const prontos = orders.filter(function(o){ return o.status==='prontos' && !o.arquivado; }).length;
@@ -337,7 +397,7 @@ function renderStats(orders){
 
 function renderPaymentBreakdown(orders){
   const today = todayKey();
-  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today; });
+  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today && o.status!=='cancelado'; });
   const porPag = {pix:0, dinheiro:0, cartao:0};
   todays.forEach(function(o){ porPag[o.forma_pagamento] = (porPag[o.forma_pagamento]||0) + Number(o.total); });
 
@@ -359,11 +419,19 @@ function renderPaymentBreakdown(orders){
 }
 
 function renderBoard(orders){
+  computeDailyNumbers(orders);
+  const query = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   const board = document.getElementById('board');
   board.innerHTML = '';
   STATUS_ORDER.forEach(function(status){
-    const colOrders = orders.filter(function(o){ return o.status===status && !o.arquivado; })
+    let colOrders = orders.filter(function(o){ return o.status===status && !o.arquivado; })
       .sort(function(a,b){ return new Date(a.criado_em) - new Date(b.criado_em); });
+
+    if(query){
+      colOrders = colOrders.filter(function(o){
+        return (o.nome||'').toLowerCase().indexOf(query)>-1 || String(o._dailyNum)===query || String(o.numero)===query;
+      });
+    }
 
     const col = document.createElement('div');
     col.className = 'col';
@@ -397,16 +465,19 @@ function renderBoard(orders){
       });
       card.addEventListener('dragend', function(){ card.classList.remove('dragging'); });
 
+      const elapsed = elapsedInfo(new Date(o.criado_em));
+      const cancelBtn = '<button class="card-action act-cancelar" onclick="cancelOrder(\''+o.id+'\')" title="Cancelar pedido">✕</button>';
+
       let actionHtml = '';
       if(status==='prontos'){
-        actionHtml = '<button class="card-action act-arquivar" onclick="archiveOrder(\''+o.id+'\')">Arquivar</button>';
+        actionHtml = '<div class="card-action-row"><button class="card-action act-arquivar" onclick="archiveOrder(\''+o.id+'\')">Arquivar</button>' + cancelBtn + '</div>';
       } else {
         const next = NEXT_STATUS[status];
-        actionHtml = '<button class="card-action act-'+next+'" onclick="moveOrder(\''+o.id+'\',\''+next+'\')">'+NEXT_LABEL[status]+'</button>';
+        actionHtml = '<div class="card-action-row"><button class="card-action act-'+next+'" onclick="moveOrder(\''+o.id+'\',\''+next+'\')">'+NEXT_LABEL[status]+'</button>' + cancelBtn + '</div>';
       }
 
       card.innerHTML =
-        '<div class="card-top"><span class="card-num">#'+o.numero+'</span><span class="card-time">'+timeLabel(new Date(o.criado_em))+'</span></div>' +
+        '<div class="card-top"><span class="card-num">#'+o._dailyNum+'</span><span class="card-time '+elapsed.cls+'">'+elapsed.label+'</span></div>' +
         (o.nome ? '<div class="card-name">'+o.nome+'</div>' : '') +
         (o.endereco ? '<div class="card-addr">'+o.endereco+(o.referencia ? ' · '+o.referencia : '')+'</div>' : '') +
         '<div class="card-items">'+itemsSummary(o.itens)+'</div>' +
@@ -419,7 +490,7 @@ function renderBoard(orders){
 
 function renderHistory(orders){
   const byDate = {};
-  orders.forEach(function(o){
+  orders.filter(function(o){ return o.status!=='cancelado'; }).forEach(function(o){
     const k = dateKey(new Date(o.criado_em));
     if(!byDate[k]) byDate[k] = {count:0, total:0};
     byDate[k].count += 1;
@@ -460,6 +531,43 @@ async function archiveOrder(id){
   await supabaseClient.from('pedidos').update({arquivado:true}).eq('id', id);
   refreshPainel();
 }
+async function cancelOrder(id){
+  if(!supabaseClient) return;
+  if(!confirm('Cancelar esse pedido? Ele sai do quadro e NÃO entra no faturamento nem na contagem de pedidos do dia.')) return;
+  await supabaseClient.from('pedidos').update({status:'cancelado'}).eq('id', id);
+  refreshPainel();
+}
+
+function renderCustomers(orders){
+  const groups = {};
+  orders.filter(function(o){ return o.status!=='cancelado'; }).forEach(function(o){
+    const key = ((o.nome||'sem nome').trim().toLowerCase()) + '|' + ((o.endereco||'').trim().toLowerCase());
+    if(!groups[key]) groups[key] = {nome:o.nome||'Sem nome', endereco:o.endereco||'', count:0, total:0, last:o.criado_em};
+    groups[key].count += 1;
+    groups[key].total += Number(o.total);
+    if(new Date(o.criado_em) > new Date(groups[key].last)) groups[key].last = o.criado_em;
+  });
+  const list = Object.values(groups).sort(function(a,b){ return b.count - a.count; });
+  const el = document.getElementById('customerList');
+  el.innerHTML = '';
+  if(list.length===0){
+    el.innerHTML = '<div class="col-empty">Sem clientes ainda</div>';
+    return;
+  }
+  list.forEach(function(c){
+    const row = document.createElement('div');
+    row.className = 'customer-row';
+    row.innerHTML =
+      '<div class="customer-info"><div class="customer-name">'+c.nome+'</div>' +
+      (c.endereco ? '<div class="customer-addr">'+c.endereco+'</div>' : '') + '</div>' +
+      (c.count>1 ? '<span class="customer-badge">Recorrente</span>' : '') +
+      '<div class="customer-stats">' +
+        '<div class="customer-stat"><div class="customer-stat-label">Pedidos</div><div class="customer-stat-value">'+c.count+'</div></div>' +
+        '<div class="customer-stat"><div class="customer-stat-label">Total gasto</div><div class="customer-stat-value">'+fmtBR(c.total)+'</div></div>' +
+      '</div>';
+    el.appendChild(row);
+  });
+}
 
 async function refreshPainel(){
   const orders = await loadOrders();
@@ -468,6 +576,7 @@ async function refreshPainel(){
   renderPaymentBreakdown(orders);
   renderBoard(orders);
   renderHistory(orders);
+  renderCustomers(orders);
 }
 
 async function encerrarExpediente(){
@@ -490,14 +599,17 @@ async function encerrarExpediente(){
 function switchSub(name){
   document.getElementById('subKanban').classList.toggle('active', name==='kanban');
   document.getElementById('subHist').classList.toggle('active', name==='historico');
+  document.getElementById('subClientes').classList.toggle('active', name==='clientes');
   document.getElementById('subViewKanban').style.display = name==='kanban' ? 'block' : 'none';
   document.getElementById('subViewHist').style.display = name==='historico' ? 'block' : 'none';
+  document.getElementById('subViewClientes').style.display = name==='clientes' ? 'block' : 'none';
 }
 
 (function init(){
   const ok = initSupabase();
-  if(!ok){ renderStats([]); renderPaymentBreakdown([]); renderBoard([]); renderHistory([]); return; }
+  if(!ok){ renderStats([]); renderPaymentBreakdown([]); renderBoard([]); renderHistory([]); renderCustomers([]); return; }
   refreshPainel();
+  setInterval(function(){ if(ordersCache.length) renderBoard(ordersCache); }, 30000);
   supabaseClient
     .channel('pedidos-realtime')
     .on('postgres_changes', {event:'INSERT', schema:'public', table:'pedidos'}, function(payload){ handleNewOrder(payload.new); })
