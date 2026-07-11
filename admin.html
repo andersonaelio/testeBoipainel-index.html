@@ -54,6 +54,22 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
 .stat-value{font-family:var(--display);font-weight:800;font-size:1.5rem;line-height:1}
 .stat-value.small{font-size:1.1rem}
 
+.payment-row{display:grid;grid-template-columns:repeat(3,1fr);gap:.9rem;margin-bottom:1.6rem}
+.pay-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:.9rem 1.1rem;display:flex;align-items:center;justify-content:space-between;
+}
+.pay-card-label{font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:.25rem .65rem;border-radius:5px}
+.pay-card-value{font-family:var(--display);font-weight:800;font-size:1.35rem}
+
+.end-shift-btn{
+  display:flex;align-items:center;gap:.4rem;
+  background:var(--panel);border:1px solid var(--line);color:var(--ash);
+  padding:.5rem .9rem;border-radius:6px;font-size:.72rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin-left:.6rem;
+}
+.end-shift-btn:hover{border-color:var(--ember);color:var(--ember-hi)}
+
 .panel-tabs{display:flex;gap:.6rem;margin-bottom:1.2rem}
 .panel-tabs button{
   border:1px solid var(--line);background:var(--panel);color:var(--ash);
@@ -138,6 +154,7 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
   </div>
   <div class="conn-status off" id="connStatus"><span class="conn-dot"></span><span id="connText">Conectando...</span></div>
   <button class="sound-toggle" id="soundToggle" onclick="toggleSound()">🔈 Ativar som</button>
+  <button class="end-shift-btn" id="endShiftBtn" onclick="encerrarExpediente()">🌙 Encerrar expediente</button>
 </div>
 
 <main>
@@ -146,6 +163,7 @@ main{padding:1.6rem;max-width:1400px;margin:0 auto}
   </div>
 
   <div class="stats-row" id="statsRow"></div>
+  <div class="payment-row" id="paymentRow"></div>
 
   <div class="panel-tabs">
     <button id="subKanban" class="active" onclick="switchSub('kanban')">Quadro</button>
@@ -299,23 +317,43 @@ function renderStats(orders){
   const preparando = orders.filter(function(o){ return o.status==='preparando' && !o.arquivado; }).length;
   const prontos = orders.filter(function(o){ return o.status==='prontos' && !o.arquivado; }).length;
   const faturamento = todays.reduce(function(s,o){ return s+Number(o.total); }, 0);
-  const porPag = {pix:0, dinheiro:0, cartao:0};
-  todays.forEach(function(o){ porPag[o.forma_pagamento] = (porPag[o.forma_pagamento]||0) + Number(o.total); });
 
   const cards = [
     {label:'Novos aguardando', value:novos},
     {label:'Em preparo', value:preparando},
     {label:'Prontos', value:prontos},
     {label:'Pedidos hoje', value:todays.length},
-    {label:'Faturamento hoje', value:fmtBR(faturamento)},
-    {label:'Pix · Dinheiro · Cartão', value:fmtBR(porPag.pix)+' · '+fmtBR(porPag.dinheiro)+' · '+fmtBR(porPag.cartao), small:true}
+    {label:'Faturamento hoje', value:fmtBR(faturamento)}
   ];
   const row = document.getElementById('statsRow');
   row.innerHTML = '';
   cards.forEach(function(c){
     const el = document.createElement('div');
     el.className = 'stat-card';
-    el.innerHTML = '<div class="stat-label">'+c.label+'</div><div class="stat-value'+(c.small?' small':'')+'">'+c.value+'</div>';
+    el.innerHTML = '<div class="stat-label">'+c.label+'</div><div class="stat-value">'+c.value+'</div>';
+    row.appendChild(el);
+  });
+}
+
+function renderPaymentBreakdown(orders){
+  const today = todayKey();
+  const todays = orders.filter(function(o){ return dateKey(new Date(o.criado_em))===today; });
+  const porPag = {pix:0, dinheiro:0, cartao:0};
+  todays.forEach(function(o){ porPag[o.forma_pagamento] = (porPag[o.forma_pagamento]||0) + Number(o.total); });
+
+  const items = [
+    {key:'pix', label:'Pix'},
+    {key:'dinheiro', label:'Dinheiro'},
+    {key:'cartao', label:'Cartão'}
+  ];
+  const row = document.getElementById('paymentRow');
+  row.innerHTML = '';
+  items.forEach(function(it){
+    const el = document.createElement('div');
+    el.className = 'pay-card';
+    el.innerHTML =
+      '<span class="pay-card-label pay-'+it.key+'">'+it.label+'</span>' +
+      '<span class="pay-card-value">'+fmtBR(porPag[it.key])+'</span>';
     row.appendChild(el);
   });
 }
@@ -427,8 +465,26 @@ async function refreshPainel(){
   const orders = await loadOrders();
   ordersCache = orders;
   renderStats(orders);
+  renderPaymentBreakdown(orders);
   renderBoard(orders);
   renderHistory(orders);
+}
+
+async function encerrarExpediente(){
+  if(!supabaseClient) return;
+  const ativos = ordersCache.filter(function(o){ return !o.arquivado; });
+  if(ativos.length===0){
+    alert('Não tem pedido ativo no quadro agora — nada pra encerrar.');
+    return;
+  }
+  const ok = confirm(
+    'Encerrar o expediente vai arquivar os ' + ativos.length + ' pedidos ativos do quadro ' +
+    '(Novos, Pagos, Preparando e Prontos), deixando tudo limpo pro próximo dia.\n\n' +
+    'O faturamento e o histórico de hoje continuam intactos — nada é apagado.\n\nConfirma?'
+  );
+  if(!ok) return;
+  await supabaseClient.from('pedidos').update({arquivado:true}).eq('arquivado', false);
+  refreshPainel();
 }
 
 function switchSub(name){
@@ -440,7 +496,7 @@ function switchSub(name){
 
 (function init(){
   const ok = initSupabase();
-  if(!ok){ renderStats([]); renderBoard([]); renderHistory([]); return; }
+  if(!ok){ renderStats([]); renderPaymentBreakdown([]); renderBoard([]); renderHistory([]); return; }
   refreshPainel();
   supabaseClient
     .channel('pedidos-realtime')
